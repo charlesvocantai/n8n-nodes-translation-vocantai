@@ -6,7 +6,6 @@ import type {
 	INodeTypeDescription,
 } from 'n8n-workflow';
 import { NodeConnectionType } from 'n8n-workflow';
-// import FormData from 'form-data';
 import axios, { AxiosError } from 'axios';
 import { Buffer } from 'buffer';
 import * as https from 'https';
@@ -78,11 +77,22 @@ export class VocantAI implements INodeType {
 				name: 'callbackUrl',
 				type: 'string',
 				default: '',
-				// required: true,
 				placeholder: 'e.g. https://your-callback-url.com',
 				hint: 'Enter the URL to which Vocant AI should send the results of the processing. Ideally, this should be the Vocant AI Trigger node webhook URL.',
 				description:
 					'Will return a JSON object with the results of the processing. The Vocant AI Trigger node can be used to receive these results and automatically grab the transcription file as binary output for additional workflow processing.',
+				displayOptions: {
+					show: {
+						operation: ['upload'],
+					},
+				},
+			},
+			{
+				displayName: 'Use Original Filename',
+				name: 'useOriginalFilename',
+				type: 'boolean',
+				default: false,
+				description: 'Whether to use the original filename as base name for the transcription file',
 				displayOptions: {
 					show: {
 						operation: ['upload'],
@@ -136,6 +146,7 @@ export class VocantAI implements INodeType {
 
 						// Get callbackUrl parameter
 						const callbackUrl = this.getNodeParameter('callbackUrl', i) as string;
+						const useOriginalFilename = this.getNodeParameter('useOriginalFilename', i) as boolean;
 
 						// Get binary data buffer directly
 						const buffer = await this.helpers.getBinaryDataBuffer(i, binaryPropertyName);
@@ -146,6 +157,9 @@ export class VocantAI implements INodeType {
 							fileSize: actualFileSize,
 							contentType: binaryData.mimeType,
 							callbackUrl: callbackUrl || undefined,
+							options: {
+								useOriginalFilename: useOriginalFilename || false,
+							},
 						};
 						console.log('VAI Upload Presign Request Data Properties:', dataProps);
 

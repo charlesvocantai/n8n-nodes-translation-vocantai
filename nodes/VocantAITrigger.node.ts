@@ -1,11 +1,13 @@
 import {
+	IBinaryData,
+	INodeExecutionData,
 	INodeType,
 	INodeTypeDescription,
 	IWebhookFunctions,
 	IWebhookResponseData,
 } from 'n8n-workflow';
 import { NodeConnectionType } from 'n8n-workflow';
-import { Buffer } from 'buffer';
+import axios from 'axios';
 
 export class VocantAITrigger implements INodeType {
 	description: INodeTypeDescription = {
@@ -34,21 +36,15 @@ export class VocantAITrigger implements INodeType {
 				required: true,
 			},
 		],
-		properties: [
-			{
-				displayName: 'Authentication',
-				name: 'authentication',
-				type: 'string',
-				default: '',
-				description: 'Optional webhook authentication token',
-			},
-		],
+		properties: [],
 	};
 
 	async webhook(this: IWebhookFunctions): Promise<IWebhookResponseData> {
+		const returnData: INodeExecutionData[] = [];
+
 		const req = this.getRequestObject();
 		const headers = this.getHeaderData();
-		const body = req.body as Buffer;
+		const webhookData = req.body;
 
 		// Optional authentication check
 		const credentials = await this.getCredentials('vocantApi');
@@ -57,47 +53,60 @@ export class VocantAITrigger implements INodeType {
 			throw new Error('Unauthorized');
 		}
 
-		// Process the incoming binary file
-		if (!body) {
+		try {
+			// Validate webhook data
+			if (!webhookData || !webhookData.jobId) {
+				throw new Error('Invalid webhook data: jobId');
+			}
+
+			const jobId = webhookData.jobId;
+			const credentials = await this.getCredentials('vocantApi');
+			const response = await axios({
+				method: 'GET',
+				url: `https://app.vocant.ai/api/webhook/download/${jobId}`,
+				headers: {
+					'x-api-key': credentials.apiKey as string,
+				},
+			});
+			// Convert response to binary data
+			const binaryResponse: IBinaryData = {
+				data: Buffer.from(response.data).toString('base64'),
+				mimeType: 'text/plain',
+				fileName: `response_${jobId}.txt`,
+			};
+
+			// Return both the JSON response and binary data
+			returnData.push({
+				json: {
+					success: true,
+					statusCode: response.status,
+				},
+				binary: {
+					data: binaryResponse,
+				},
+				pairedItem: {
+					item: 0,
+				},
+			});
+		} catch (error) {
+			// Handle errors
 			return {
 				workflowData: [
 					[
 						{
 							json: {
 								status: 'error',
-								message: 'No file content received',
+								message: error.message,
+								originalData: webhookData,
+								timestamp: new Date().toISOString(),
 							},
 						},
 					],
 				],
 			};
 		}
-
-		// Get filename from headers or generate one
-		const contentDisposition = headers['content-disposition'] || '';
-		const filenameMatch = contentDisposition.match(/filename="(.+)"/);
-		const filename = filenameMatch ? filenameMatch[1] : 'transcription.txt';
-
-		// Return the binary data
 		return {
-			workflowData: [
-				[
-					{
-						json: {
-							headers,
-							timestamp: new Date().toISOString(),
-							filename,
-						},
-						binary: {
-							data: {
-								data: body.toString('base64'),
-								mimeType: 'text/plain',
-								fileName: filename,
-							},
-						},
-					},
-				],
-			],
+			workflowData: [returnData],
 		};
 	}
 }
