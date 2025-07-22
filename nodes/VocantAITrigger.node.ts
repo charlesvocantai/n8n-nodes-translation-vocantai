@@ -80,6 +80,7 @@ export class VocantAITrigger implements INodeType {
 				json: {
 					success: true,
 					statusCode: response.status,
+					jobId: jobId,
 				},
 				binary: {
 					data: binaryResponse,
