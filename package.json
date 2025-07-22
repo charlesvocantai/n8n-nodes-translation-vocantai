@@ -18,7 +18,7 @@
 		"url": "git+https://github.com/VocantAI/n8n-nodes-translation-vocantai.git"
 	},
 	"license": "MIT",
-	"author": "undefined <dev@vocant.ai>",
+	"author": "Engineering <dev@vocant.ai>",
 	"type": "commonjs",
 	"main": "index.js",
 	"files": [
@@ -28,7 +28,8 @@
 	"scripts": {
 		"build": "npx rimraf dist && tsc && gulp build:icons",
 		"dev": "tsc --watch",
-		"prepublishOnly": "npm run build && npm run lint -c .eslintrc.prepublish.js nodes package.json"
+		"prepublishOnly": "npm run build && npm run lint -c .eslintrc.prepublish.js nodes package.json",
+		"publish:npm": "pnpm run build && npm publish --access public"
 	},
 	"dependencies": {
 		"axios": "^1.10.0",
