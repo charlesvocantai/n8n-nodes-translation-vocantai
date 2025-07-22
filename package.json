@@ -1,7 +1,7 @@
 {
-	"name": "n8n-nodes-translation-vocantai",
+	"name": "@vocantai/n8n-nodes-translation-vocantai",
 	"version": "0.1.0",
-	"description": "",
+	"description": "Audio file transcription services. Your speech. Private.",
 	"keywords": [
 		"n8n-community-node-package",
 		"n8n-nodes-translation-vocantai",
@@ -9,33 +9,33 @@
 		"translation",
 		"STT"
 	],
+	"homepage": "https://github.com/VocantAI/n8n-nodes-translation-vocantai#readme",
+	"bugs": {
+		"url": "https://github.com/VocantAI/n8n-nodes-translation-vocantai/issues"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/VocantAI/n8n-nodes-translation-vocantai.git"
+	},
 	"license": "MIT",
-	"author": {
-		"name": "",
-		"email": "dev@vocant.ai"
-	},
-	"engines": {
-		"node": ">=20.15"
-	},
+	"author": "undefined <dev@vocant.ai>",
+	"type": "commonjs",
 	"main": "index.js",
+	"files": [
+		"dist",
+		"resources"
+	],
 	"scripts": {
 		"build": "npx rimraf dist && tsc && gulp build:icons",
 		"dev": "tsc --watch",
 		"prepublishOnly": "npm run build && npm run lint -c .eslintrc.prepublish.js nodes package.json"
 	},
-	"files": [
-		"dist",
-		"resources"
-	],
-	"n8n": {
-		"n8nNodesApiVersion": 1,
-		"nodes": [
-			"dist/nodes/VocantAI.node.js",
-			"dist/nodes/VocantAITrigger.node.js"
-		],
-		"credentials": [
-			"dist/credentials/VocantApi.credentials.js"
-		]
+	"dependencies": {
+		"axios": "^1.10.0",
+		"form-data": "^4.0.3",
+		"https": "^1.0.0",
+		"timer": "^1.0.1",
+		"timers": "^0.1.1"
 	},
 	"devDependencies": {
 		"@types/node": "^24.0.3",
@@ -49,11 +49,17 @@
 	"peerDependencies": {
 		"n8n-workflow": "*"
 	},
-	"dependencies": {
-		"axios": "^1.10.0",
-		"form-data": "^4.0.3",
-		"https": "^1.0.0",
-		"timer": "^1.0.1",
-		"timers": "^0.1.1"
+	"engines": {
+		"node": ">=20.15"
+	},
+	"n8n": {
+		"n8nNodesApiVersion": 1,
+		"nodes": [
+			"dist/nodes/VocantAI.node.js",
+			"dist/nodes/VocantAITrigger.node.js"
+		],
+		"credentials": [
+			"dist/credentials/VocantApi.credentials.js"
+		]
 	}
 }
