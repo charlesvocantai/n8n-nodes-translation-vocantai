@@ -1,13 +1,12 @@
 import {
 	IBinaryData,
-	INodeExecutionData,
 	INodeType,
 	INodeTypeDescription,
 	IWebhookFunctions,
 	IWebhookResponseData,
+	IHttpRequestOptions,
 } from 'n8n-workflow';
 import { NodeConnectionType } from 'n8n-workflow';
-import axios from 'axios';
 
 export class VocantAITrigger implements INodeType {
 	description: INodeTypeDescription = {
@@ -40,57 +39,58 @@ export class VocantAITrigger implements INodeType {
 	};
 
 	async webhook(this: IWebhookFunctions): Promise<IWebhookResponseData> {
-		const returnData: INodeExecutionData[] = [];
-
 		const req = this.getRequestObject();
 		const headers = this.getHeaderData();
 		const webhookData = req.body;
 
-		// Optional authentication check
 		const credentials = await this.getCredentials('vocantApi');
 		const authToken = credentials.apiKey as string;
+
 		if (authToken && headers['x-api-key'] !== authToken) {
 			throw new Error('Unauthorized');
 		}
 
 		try {
-			// Validate webhook data
 			if (!webhookData || !webhookData.jobId) {
 				throw new Error('Invalid webhook data: jobId');
 			}
 
 			const jobId = webhookData.jobId;
-			const credentials = await this.getCredentials('vocantApi');
-			const response = await axios({
+
+			const downloadOptions: IHttpRequestOptions = {
 				method: 'GET',
 				url: `https://app.vocant.ai/api/webhook/download/${jobId}`,
 				headers: {
 					'x-api-key': credentials.apiKey as string,
 				},
-			});
-			// Convert response to binary data
-			const binaryResponse: IBinaryData = {
-				data: Buffer.from(response.data).toString('base64'),
-				mimeType: 'text/plain',
-				fileName: `response_${jobId}.txt`,
+				encoding: 'text',
 			};
 
-			// Return both the JSON response and binary data
-			returnData.push({
-				json: {
-					success: true,
-					statusCode: response.status,
-					jobId: jobId,
-				},
-				binary: {
-					data: binaryResponse,
-				},
-				pairedItem: {
-					item: 0,
-				},
-			});
+			const response = await this.helpers.httpRequest(downloadOptions);
+
+			const binaryResponse: IBinaryData = {
+				data: Buffer.from(response as string).toString('base64'),
+				mimeType: 'text/plain',
+				fileName: `transcription_${jobId}.txt`,
+			};
+
+			return {
+				workflowData: [
+					[
+						{
+							json: {
+								success: true,
+								jobId,
+								timestamp: new Date().toISOString(),
+							},
+							binary: {
+								data: binaryResponse,
+							},
+						},
+					],
+				],
+			};
 		} catch (error) {
-			// Handle errors
 			return {
 				workflowData: [
 					[
@@ -106,8 +106,5 @@ export class VocantAITrigger implements INodeType {
 				],
 			};
 		}
-		return {
-			workflowData: [returnData],
-		};
 	}
 }

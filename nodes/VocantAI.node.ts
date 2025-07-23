@@ -4,16 +4,14 @@ import type {
 	INodeExecutionData,
 	INodeType,
 	INodeTypeDescription,
+	IHttpRequestOptions,
 } from 'n8n-workflow';
 import { NodeConnectionType } from 'n8n-workflow';
-import axios, { AxiosError } from 'axios';
-import { Buffer } from 'buffer';
-import * as https from 'https';
 
 export class VocantAI implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'Vocant AI',
-		name: '',
+		name: 'VocantAI',
 		icon: 'file:vocant.svg',
 		group: ['transform'],
 		version: 1,
@@ -122,167 +120,118 @@ export class VocantAI implements INodeType {
 		const operation = this.getNodeParameter('operation', 0) as string;
 		const credentials = await this.getCredentials('vocantApi');
 
-		// Create a custom HTTPS agent with longer timeout
-		const httpsAgent = new https.Agent({
-			rejectUnauthorized: true,
-			timeout: 30000, // 30 second timeout
-			keepAlive: true,
-		});
-
 		for (let i = 0; i < items.length; i++) {
 			try {
 				if (operation === 'upload') {
-					try {
-						const binaryPropertyName = this.getNodeParameter('file', i) as string;
+					const binaryPropertyName = this.getNodeParameter('file', i) as string;
+					const callbackUrl = this.getNodeParameter('callbackUrl', i) as string;
+					const useOriginalFilename = this.getNodeParameter('useOriginalFilename', i) as boolean;
 
-						if (!items[i].binary) {
-							throw new Error('No binary data found');
-						}
-						const binary = items[i].binary as { [key: string]: IBinaryData };
-						const binaryData = binary[binaryPropertyName];
-						if (!binaryData) {
-							throw new Error(`No binary data found for property "${binaryPropertyName}"`);
-						}
+					if (!items[i].binary?.[binaryPropertyName]) {
+						throw new Error(`No binary data found for property "${binaryPropertyName}"`);
+					}
 
-						// Get callbackUrl parameter
-						const callbackUrl = this.getNodeParameter('callbackUrl', i) as string;
-						const useOriginalFilename = this.getNodeParameter('useOriginalFilename', i) as boolean;
+					const binaryData = items[i].binary![binaryPropertyName];
+					const buffer = await this.helpers.getBinaryDataBuffer(i, binaryPropertyName);
 
-						// Get binary data buffer directly
-						const buffer = await this.helpers.getBinaryDataBuffer(i, binaryPropertyName);
-						const actualFileSize = buffer.length;
-
-						const dataProps = {
+					// Step 1: Get presigned URL using n8n's httpRequest
+					const presignedOptions: IHttpRequestOptions = {
+						method: 'POST',
+						url: 'https://app.vocant.ai/api/webhook/presigned',
+						headers: {
+							'Content-Type': 'application/json',
+							'X-API-KEY': credentials.apiKey as string,
+						},
+						body: {
 							fileName: binaryData.fileName,
-							fileSize: actualFileSize,
+							fileSize: buffer.length,
 							contentType: binaryData.mimeType,
 							callbackUrl: callbackUrl || undefined,
 							options: {
 								useOriginalFilename: useOriginalFilename || false,
 							},
-						};
-						console.log('VAI Upload Presign Request Data Properties:', dataProps);
+						},
+						json: true,
+					};
 
-						// Step 1: Get presigned URL
-						const presignedResponse = await axios({
-							method: 'POST',
-							url: 'https://app.vocant.ai/api/webhook/presigned',
-							headers: {
-								'Content-Type': 'application/json',
-								'X-API-KEY': credentials.apiKey as string,
-							},
-							data: dataProps,
-						});
+					const presignedResponse = await this.helpers.httpRequest(presignedOptions);
+					const { jobId, uploadUrl, fileUrl, expiresIn } = presignedResponse;
 
-						const { jobId, uploadUrl, fileUrl, expiresIn } = presignedResponse.data;
+					// Step 2: Upload file using n8n's httpRequest
+					const uploadOptions: IHttpRequestOptions = {
+						method: 'PUT',
+						url: uploadUrl,
+						headers: {
+							'Content-Type': binaryData.mimeType || 'audio/mpeg',
+						},
+						body: buffer,
+					};
 
-						// Step 2: Upload file using buffer directly
-						await axios({
-							method: 'PUT',
-							url: uploadUrl,
-							headers: {
-								'Content-Type': binaryData.mimeType || 'audio/mpeg',
-								'Content-Length': actualFileSize,
-							},
-							data: buffer,
-							maxBodyLength: Infinity,
-							maxContentLength: Infinity,
-						});
+					await this.helpers.httpRequest(uploadOptions);
 
-						// Return success response
-						returnData.push({
-							json: {
-								success: true,
-								jobId,
-								fileUrl,
-								expiresIn,
-								originalFileName: binaryData.fileName,
-								fileSize: actualFileSize,
-								uploadTimestamp: new Date().toISOString(),
-							},
-							pairedItem: { item: i },
-						});
-					} catch (error) {
-						if (this.continueOnFail()) {
-							returnData.push({
-								json: {
-									success: false,
-									error: error.message,
-									details: error.response?.data || {},
-								},
-								pairedItem: { item: i },
-							});
-							continue;
-						}
-						throw error;
-					}
+					returnData.push({
+						json: {
+							success: true,
+							jobId,
+							fileUrl,
+							expiresIn,
+							originalFileName: binaryData.fileName,
+							fileSize: buffer.length,
+							uploadTimestamp: new Date().toISOString(),
+						},
+						pairedItem: { item: i },
+					});
 				}
+
 				if (operation === 'checkStatus') {
 					const jobId = this.getNodeParameter('jobId', i) as string;
 
-					const requestOptions = {
+					const statusOptions: IHttpRequestOptions = {
 						method: 'GET',
 						url: `https://app.vocant.ai/api/webhook/status/${jobId}`,
 						headers: {
 							Accept: 'application/json',
 							'x-api-key': credentials.apiKey as string,
 						},
-						httpsAgent,
-						timeout: 30000, // 30 second timeout
-						maxRetries: 3,
-						retryDelay: 1000,
+						json: true,
 					};
 
-					try {
-						const response = await axios(requestOptions);
-						returnData.push({
-							json: response.data,
-							pairedItem: { item: i },
-						});
-					} catch (error) {
-						if (error instanceof AxiosError) {
-							const errorMessage =
-								error.code === 'ECONNRESET'
-									? 'Connection reset by server. Please try again.'
-									: error.message;
-
-							throw new Error(
-								`Status check failed: ${errorMessage}\nRequest URL: ${requestOptions.url}`,
-							);
-						}
-						throw error;
-					}
+					const response = await this.helpers.httpRequest(statusOptions);
+					returnData.push({
+						json: response,
+						pairedItem: { item: i },
+					});
 				}
+
 				if (operation === 'getTranscription') {
 					const jobId = this.getNodeParameter('jobId', i) as string;
 
-					const credentials = await this.getCredentials('vocantApi');
-					const response = await axios({
+					const downloadOptions: IHttpRequestOptions = {
 						method: 'GET',
 						url: `https://app.vocant.ai/api/webhook/download/${jobId}`,
 						headers: {
 							'x-api-key': credentials.apiKey as string,
 						},
-					});
-					// Convert response to binary data
-					const binaryResponse: IBinaryData = {
-						data: Buffer.from(response.data).toString('base64'),
-						mimeType: 'text/plain',
-						fileName: `response_${jobId}.txt`,
+						encoding: 'text',
 					};
 
-					// Return both the JSON response and binary data
+					const response = await this.helpers.httpRequest(downloadOptions);
+
+					const binaryResponse: IBinaryData = {
+						data: Buffer.from(response as string).toString('base64'),
+						mimeType: 'text/plain',
+						fileName: `transcription_${jobId}.txt`,
+					};
+
 					returnData.push({
 						json: {
 							success: true,
-							statusCode: response.status,
+							jobId,
 						},
 						binary: {
 							data: binaryResponse,
 						},
-						pairedItem: {
-							item: i,
-						},
+						pairedItem: { item: i },
 					});
 				}
 			} catch (error) {
@@ -291,9 +240,7 @@ export class VocantAI implements INodeType {
 						json: {
 							error: error.message,
 						},
-						pairedItem: {
-							item: i,
-						},
+						pairedItem: { item: i },
 					});
 					continue;
 				}
