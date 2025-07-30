@@ -7,7 +7,10 @@
 		"n8n-nodes-translation-vocantai",
 		"vocant-ai",
 		"translation",
-		"STT"
+		"STT",
+		"speech-to-text",
+		"speech",
+		"transcription"
 	],
 	"homepage": "https://github.com/VocantAI/n8n-nodes-translation-vocantai#readme",
 	"bugs": {
@@ -54,7 +57,8 @@
 		"n8nNodesApiVersion": 1,
 		"nodes": [
 			"dist/nodes/VocantAI.node.js",
-			"dist/nodes/VocantAITrigger.node.js"
+			"dist/nodes/VocantAITrigger.node.js",
+			"dist/nodes/VocantAIOrchestrator.node.js"
 		],
 		"credentials": [
 			"dist/credentials/VocantApi.credentials.js"
