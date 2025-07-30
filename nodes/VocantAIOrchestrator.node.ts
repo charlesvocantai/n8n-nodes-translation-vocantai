@@ -141,15 +141,19 @@ export class VocantAIOrchestrator implements INodeType {
 						json: true,
 					};
 					const statusResponse = await this.helpers.httpRequest(statusOptions);
-					status = statusResponse.status;
-					console.log(`Status for jobId ${jobId}: ${status}`);
-					if (status === 'completed' && statusResponse.downloadUrl) {
+
+					// Use 'state' instead of 'status'
+					const state = statusResponse.state;
+					console.log(`State for jobId ${jobId}: ${state}`);
+					console.log('Full status response:', JSON.stringify(statusResponse, null, 2));
+
+					if (state === 'completed' && statusResponse.downloadUrl) {
 						transcriptionUrl = statusResponse.downloadUrl;
 						break;
 					}
-					if (status === 'failed') {
+					if (state === 'failed') {
 						throw new Error(
-							`Transcription failed: ${jobId}: ${statusResponse.error || 'Unknown error'}`,
+							`Transcription failed: ${jobId}: ${statusResponse.message || 'Unknown error'}`,
 						);
 					}
 				}
