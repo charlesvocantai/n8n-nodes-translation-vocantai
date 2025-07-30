@@ -72,8 +72,12 @@ export class VocantAIOrchestrator implements INodeType {
 				const pollInterval = this.getNodeParameter('pollInterval', i) as number;
 				const maxWait = this.getNodeParameter('maxWait', i) as number;
 
+				console.log(JSON.stringify(items[i], null, 2));
+
 				if (!items[i].binary?.[binaryPropertyName]) {
-					throw new Error(`No binary data found for property "${binaryPropertyName}"`);
+					throw new Error(
+						`No binary data found for property "${binaryPropertyName}": ${JSON.stringify(items[i], null, 2)}`,
+					);
 				}
 				const binaryData = items[i].binary![binaryPropertyName];
 				const buffer = await this.helpers.getBinaryDataBuffer(i, binaryPropertyName);
