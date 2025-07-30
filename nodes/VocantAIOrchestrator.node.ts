@@ -128,7 +128,6 @@ export class VocantAIOrchestrator implements INodeType {
 				let transcriptionUrl = '';
 				while (waited < maxWait) {
 					await new Promise((resolve) => setTimeout(resolve, pollInterval * 1000));
-
 					waited += pollInterval;
 
 					const statusOptions: IHttpRequestOptions = {
@@ -142,13 +141,13 @@ export class VocantAIOrchestrator implements INodeType {
 					};
 					const statusResponse = await this.helpers.httpRequest(statusOptions);
 
-					// Use 'state' instead of 'status'
 					const state = statusResponse.state;
+					const downloadUrl = statusResponse.downloadUrl;
 					console.log(`State for jobId ${jobId}: ${state}`);
 					console.log('Full status response:', JSON.stringify(statusResponse, null, 2));
 
-					if (state === 'completed' && statusResponse.downloadUrl) {
-						transcriptionUrl = statusResponse.downloadUrl;
+					if (state === 'completed' && typeof downloadUrl === 'string' && downloadUrl) {
+						transcriptionUrl = downloadUrl;
 						break;
 					}
 					if (state === 'failed') {
