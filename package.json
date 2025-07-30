@@ -37,13 +37,13 @@
 		"prepublishOnly": "npm run build && eslint -c .eslintrc.prepublish.js nodes package.json",
 		"publish:npm": "pnpm run build && npm publish --access public"
 	},
-	"dependencies": {},
 	"devDependencies": {
 		"@types/node": "^24.0.3",
 		"@typescript-eslint/parser": "~8.32.0",
 		"eslint": "^8.57.0",
 		"eslint-plugin-n8n-nodes-base": "^1.16.3",
 		"gulp": "^5.0.0",
+		"gulp-rename": "^2.1.0",
 		"prettier": "^3.5.3",
 		"typescript": "^5.8.2"
 	},
