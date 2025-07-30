@@ -1,6 +1,6 @@
 {
 	"name": "@vocantai/n8n-nodes-translation-vocantai",
-	"version": "0.1.3",
+	"version": "0.1.4",
 	"description": "Audio file transcription services. Your speech. Private.",
 	"keywords": [
 		"n8n-community-node-package",
