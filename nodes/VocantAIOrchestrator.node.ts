@@ -72,113 +72,116 @@ export class VocantAIOrchestrator implements INodeType {
 				const pollInterval = this.getNodeParameter('pollInterval', i) as number;
 				const maxWait = this.getNodeParameter('maxWait', i) as number;
 
-				if (!items[i]?.bianary || !items[i]?.binary?.[binaryPropertyName]) {
+				const binaryInput = items[i].binary?.[binaryPropertyName];
+
+				if (!binaryInput) {
 					throw new Error(`No binary data found for property "${binaryPropertyName}"`);
 				}
 
-				const binaryData = items[i].binary?.[binaryPropertyName];
-				if (!binaryData) {
-					throw new Error(`No binary data found for property "${binaryPropertyName}"`);
-				}
-				const buffer = await this.helpers.getBinaryDataBuffer(i, binaryPropertyName);
+				// If it's an array, process each file
+				const binaries = Array.isArray(binaryInput) ? binaryInput : [binaryInput];
 
-				// Step 1: Get presigned URL
-				const presignedOptions: IHttpRequestOptions = {
-					method: 'POST',
-					url: 'https://app.vocant.ai/api/webhook/presigned',
-					headers: {
-						'Content-Type': 'application/json',
-						'X-API-KEY': credentials.apiKey as string,
-					},
-					body: {
-						fileName: binaryData.fileName,
-						fileSize: buffer.length,
-						contentType: binaryData.mimeType,
-						options: {
-							useOriginalFilename,
-						},
-					},
-					json: true,
-				};
-				const presignedResponse = await this.helpers.httpRequest(presignedOptions);
-				const { jobId, uploadUrl } = presignedResponse;
+				for (const binaryData of binaries) {
+					const buffer = await this.helpers.getBinaryDataBuffer(i, binaryPropertyName);
 
-				// Step 2: Upload file
-				const uploadOptions: IHttpRequestOptions = {
-					method: 'PUT',
-					url: uploadUrl,
-					headers: {
-						'Content-Type': binaryData.mimeType || 'audio/mpeg',
-					},
-					body: buffer,
-				};
-				await this.helpers.httpRequest(uploadOptions);
-
-				// Step 3: Poll for completion
-				let status = 'pending';
-				let waited = 0;
-				let transcriptionUrl = '';
-				while (waited < maxWait) {
-					await new Promise((resolve) => setTimeout(resolve, pollInterval * 1000));
-					waited += pollInterval;
-
-					const statusOptions: IHttpRequestOptions = {
-						method: 'GET',
-						url: `https://app.vocant.ai/api/webhook/status/${jobId}`,
+					// Step 1: Get presigned URL
+					const presignedOptions: IHttpRequestOptions = {
+						method: 'POST',
+						url: 'https://app.vocant.ai/api/webhook/presigned',
 						headers: {
-							Accept: 'application/json',
-							'x-api-key': credentials.apiKey as string,
+							'Content-Type': 'application/json',
+							'X-API-KEY': credentials.apiKey as string,
+						},
+						body: {
+							fileName: binaryData.fileName,
+							fileSize: buffer.length,
+							contentType: binaryData.mimeType,
+							options: {
+								useOriginalFilename,
+							},
 						},
 						json: true,
 					};
-					const statusResponse = await this.helpers.httpRequest(statusOptions);
-					status = statusResponse.status;
-					if (status === 'completed' && statusResponse.downloadUrl) {
-						transcriptionUrl = statusResponse.downloadUrl;
-						break;
+					const presignedResponse = await this.helpers.httpRequest(presignedOptions);
+					const { jobId, uploadUrl } = presignedResponse;
+
+					// Step 2: Upload file
+					const uploadOptions: IHttpRequestOptions = {
+						method: 'PUT',
+						url: uploadUrl,
+						headers: {
+							'Content-Type': binaryData.mimeType || 'audio/mpeg',
+						},
+						body: buffer,
+					};
+					await this.helpers.httpRequest(uploadOptions);
+
+					// Step 3: Poll for completion
+					let status = 'pending';
+					let waited = 0;
+					let transcriptionUrl = '';
+					while (waited < maxWait) {
+						await new Promise((resolve) => setTimeout(resolve, pollInterval * 1000));
+						waited += pollInterval;
+
+						const statusOptions: IHttpRequestOptions = {
+							method: 'GET',
+							url: `https://app.vocant.ai/api/webhook/status/${jobId}`,
+							headers: {
+								Accept: 'application/json',
+								'x-api-key': credentials.apiKey as string,
+							},
+							json: true,
+						};
+						const statusResponse = await this.helpers.httpRequest(statusOptions);
+						status = statusResponse.status;
+						if (status === 'completed' && statusResponse.downloadUrl) {
+							transcriptionUrl = statusResponse.downloadUrl;
+							break;
+						}
+						if (status === 'failed') {
+							throw new Error(`Transcription failed: ${statusResponse.error || 'Unknown error'}`);
+						}
 					}
-					if (status === 'failed') {
-						throw new Error(`Transcription failed: ${statusResponse.error || 'Unknown error'}`);
+					if (!transcriptionUrl) {
+						throw new Error('Transcription did not complete in time');
 					}
+
+					// Step 4: Download transcription
+					const downloadOptions: IHttpRequestOptions = {
+						method: 'GET',
+						url: transcriptionUrl,
+						headers: {
+							'x-api-key': credentials.apiKey as string,
+						},
+						encoding: 'text',
+					};
+					const response = await this.helpers.httpRequest(downloadOptions);
+
+					const fileName =
+						useOriginalFilename && binaryData.fileName
+							? binaryData.fileName.replace(/\.[^/.]+$/, '') + '_transcription.txt'
+							: `transcription_${jobId}.txt`;
+
+					const binaryResponse: IBinaryData = {
+						data: Buffer.from(response as string).toString('base64'),
+						mimeType: 'text/plain',
+						fileName,
+					};
+
+					returnData.push({
+						json: {
+							success: true,
+							jobId,
+							status,
+							waited,
+						},
+						binary: {
+							data: binaryResponse,
+						},
+						pairedItem: { item: i },
+					});
 				}
-				if (!transcriptionUrl) {
-					throw new Error('Transcription did not complete in time');
-				}
-
-				// Step 4: Download transcription
-				const downloadOptions: IHttpRequestOptions = {
-					method: 'GET',
-					url: transcriptionUrl,
-					headers: {
-						'x-api-key': credentials.apiKey as string,
-					},
-					encoding: 'text',
-				};
-				const response = await this.helpers.httpRequest(downloadOptions);
-
-				const fileName =
-					useOriginalFilename && binaryData.fileName
-						? binaryData.fileName.replace(/\.[^/.]+$/, '') + '_transcription.txt'
-						: `transcription_${jobId}.txt`;
-
-				const binaryResponse: IBinaryData = {
-					data: Buffer.from(response as string).toString('base64'),
-					mimeType: 'text/plain',
-					fileName,
-				};
-
-				returnData.push({
-					json: {
-						success: true,
-						jobId,
-						status,
-						waited,
-					},
-					binary: {
-						data: binaryResponse,
-					},
-					pairedItem: { item: i },
-				});
 			} catch (error) {
 				if (this.continueOnFail()) {
 					returnData.push({

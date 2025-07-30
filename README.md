@@ -93,6 +93,11 @@ VocantAI supports various audio formats including:
 
 ## Version history
 
+### 0.1.5
+
+- Fix: Support for multiple binary files in the "data" property in VocantAIOrchestrator node.
+- Improvement: More robust binary input handling.
+
 ### 0.1.0
 
 - Initial release
