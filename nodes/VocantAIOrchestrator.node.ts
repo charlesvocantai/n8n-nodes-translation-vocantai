@@ -86,6 +86,7 @@ export class VocantAIOrchestrator implements INodeType {
 				console.log('binaryPropertyName:', binaryPropertyName);
 
 				// Step 1: Get presigned URL
+				console.log('Requesting presigned URL...');
 				const presignedOptions: IHttpRequestOptions = {
 					method: 'POST',
 					url: 'https://app.vocant.ai/api/webhook/presigned',
@@ -105,8 +106,10 @@ export class VocantAIOrchestrator implements INodeType {
 				};
 				const presignedResponse = await this.helpers.httpRequest(presignedOptions);
 				const { jobId, uploadUrl } = presignedResponse;
+				console.log('Presigned response success for jobId:', jobId);
 
-				// Step 2: Upload file
+				// Step 2: Upload file using n8n's httpRequest
+				console.log('Uploading file to presigned URL...');
 				const uploadOptions: IHttpRequestOptions = {
 					method: 'PUT',
 					url: uploadUrl,
@@ -115,14 +118,17 @@ export class VocantAIOrchestrator implements INodeType {
 					},
 					body: buffer,
 				};
+
 				await this.helpers.httpRequest(uploadOptions);
 
 				// Step 3: Poll for completion
+				console.log('Check for transcription status...');
 				let status = 'pending';
 				let waited = 0;
 				let transcriptionUrl = '';
 				while (waited < maxWait) {
 					await new Promise((resolve) => setTimeout(resolve, pollInterval * 1000));
+
 					waited += pollInterval;
 
 					const statusOptions: IHttpRequestOptions = {
@@ -136,16 +142,30 @@ export class VocantAIOrchestrator implements INodeType {
 					};
 					const statusResponse = await this.helpers.httpRequest(statusOptions);
 					status = statusResponse.status;
+					console.log(`Status for jobId ${jobId}: ${status}`);
 					if (status === 'completed' && statusResponse.downloadUrl) {
 						transcriptionUrl = statusResponse.downloadUrl;
 						break;
 					}
 					if (status === 'failed') {
-						throw new Error(`Transcription failed: ${statusResponse.error || 'Unknown error'}`);
+						throw new Error(
+							`Transcription failed: ${jobId}: ${statusResponse.error || 'Unknown error'}`,
+						);
 					}
 				}
 				if (!transcriptionUrl) {
-					throw new Error('Transcription did not complete in time');
+					// Push to error output with jobId and error info
+					returnData.push({
+						json: {
+							success: false,
+							jobId,
+							error: `Transcription jobId ${jobId} did not complete in time`,
+							status,
+							waited,
+						},
+						pairedItem: { item: i },
+					});
+					continue; // Don't throw, just continue to next item
 				}
 
 				// Step 4: Download transcription
