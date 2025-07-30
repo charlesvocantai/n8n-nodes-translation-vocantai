@@ -41,7 +41,7 @@ export class VocantAIOrchestrator implements INodeType {
 				name: 'useOriginalFilename',
 				type: 'boolean',
 				default: false,
-				description: 'Use original filename for the transcription file',
+				description: 'Whether to use the original filename for the transcription file',
 			},
 			{
 				displayName: 'Polling Interval (seconds)',
