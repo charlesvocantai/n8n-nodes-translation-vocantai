@@ -75,9 +75,11 @@ export class VocantAIOrchestrator implements INodeType {
 				if (!items[i].binary?.[binaryPropertyName]) {
 					throw new Error(`No binary data found for property "${binaryPropertyName}"`);
 				}
-
 				const binaryData = items[i].binary![binaryPropertyName];
 				const buffer = await this.helpers.getBinaryDataBuffer(i, binaryPropertyName);
+
+				console.log('Item', i, 'binary:', items[i].binary);
+				console.log('binaryPropertyName:', binaryPropertyName);
 
 				// Step 1: Get presigned URL
 				const presignedOptions: IHttpRequestOptions = {
